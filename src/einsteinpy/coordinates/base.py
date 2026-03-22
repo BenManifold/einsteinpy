@@ -5,7 +5,7 @@ reducing duplication across Cartesian, Spherical, and Boyer-Lindquist variants.
 See https://github.com/einsteinpy/einsteinpy/issues/650
 """
 
-from typing import Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 from astropy import units as u
@@ -26,7 +26,11 @@ class BaseSpatialCoordinate:
     the rest are spatial components in order.
     """
 
-    def __getitem__(self, item):
+    _dimension: Dict[str, Any]
+    _dimension_order: Tuple[str, ...]
+    t: Any  # astropy Quantity
+
+    def __getitem__(self, item: Any) -> Any:
         """
         Return coordinate components by name or integer index.
 
@@ -42,10 +46,10 @@ class BaseSpatialCoordinate:
             The requested component, or ``system`` when ``"system"`` is passed.
         """
         if isinstance(item, (int, np.integer)):
-            return self._dimension[self._dimension_order[item]]  # type: ignore[attr-defined]
-        return self._dimension[item]  # type: ignore[attr-defined]
+            return self._dimension[self._dimension_order[item]]
+        return self._dimension[item]
 
-    def position(self):
+    def position(self) -> Tuple[float, ...]:
         """
         Return the position 4-vector in SI units (c*t, spatial...).
 
@@ -54,11 +58,9 @@ class BaseSpatialCoordinate:
         tuple
             4-tuple containing the position 4-vector in SI units.
         """
-        t_val = _c * self.t.si.value  # type: ignore[attr-defined]
-        spatial_names = self._dimension_order[1:]  # type: ignore[attr-defined]
-        spatial_vals = [
-            self._dimension[n].si.value for n in spatial_names  # type: ignore[attr-defined]
-        ]
+        t_val = _c * self.t.si.value
+        spatial_names = self._dimension_order[1:]
+        spatial_vals = [self._dimension[n].si.value for n in spatial_names]
         return (t_val, *spatial_vals)
 
 
@@ -71,34 +73,41 @@ class BaseCoordinateDifferential:
     """
 
     _spatial_component_names: Tuple[str, ...] = ()  # override in subclass
+    _v_t: Any
+    t: Any  # astropy Quantity
+    system: str
 
-    def position(self):
+    def _velocity_si_values(self) -> Tuple[float, float, float]:
+        """Return (v1, v2, v3) in SI units. Subclasses must implement."""
+        raise NotImplementedError
+
+    def position(self) -> Tuple[float, ...]:
         """Return the position 4-vector in SI units (c*t, spatial...)."""
-        t_val = _c * self.t.si.value  # type: ignore[attr-defined]
+        t_val = _c * self.t.si.value
         spatial_vals = [
             getattr(self, n).si.value for n in self._spatial_component_names
         ]
         return (t_val, *spatial_vals)
 
     @property
-    def v_t(self):
+    def v_t(self) -> Any:
         """Return the timelike component of 4-velocity."""
         return self._v_t
 
     @v_t.setter
-    def v_t(self, args):  # type: ignore[no-untyped-def]
+    def v_t(self, args: Any) -> None:
         g = args[0]
-        if self.system != g.coords.system:  # type: ignore[attr-defined]
+        if self.system != g.coords.system:
             raise CoordinateError(
                 f"Metric object has been instantiated with a coordinate system, "
-                f"({g.coords.system}) other than {self.system} Coordinates."  # type: ignore[attr-defined]
+                f"({g.coords.system}) other than {self.system} Coordinates."
             )
         g_cov_mat = g.metric_covariant(self.position())
-        v_t_val = v0(g_cov_mat, *self._velocity_si_values())  # type: ignore[attr-defined]
+        v_t_val = v0(g_cov_mat, *self._velocity_si_values())
         self._v_t = v_t_val * u.m / u.s
 
-    def velocity(self, metric):  # type: ignore[no-untyped-def]
+    def velocity(self, metric: Any) -> Tuple[float, ...]:
         """Return the velocity 4-vector in SI units."""
         self.v_t = (metric,)
-        v1, v2, v3 = self._velocity_si_values()  # type: ignore[attr-defined]
+        v1, v2, v3 = self._velocity_si_values()
         return (self._v_t.value, v1, v2, v3)
