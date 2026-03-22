@@ -370,7 +370,6 @@ class KerrNewman(BaseMetric):
         """
         chl = self.christoffels(vec[:4])
         F_contra = self.em_tensor_contravariant(vec[:4])
-        g_cov = self.metric_covariant(vec[:4])
 
         vals = np.zeros(shape=vec.shape, dtype=vec.dtype)
 
@@ -405,7 +404,9 @@ class KerrNewman(BaseMetric):
             + chl[3, 2, 3] * vec[6] * vec[7]
         )
 
-        vals[4:] -= self.q.value * (F_contra @ vec[4:] @ g_cov)
+        # Lorentz force: a^μ += (q/m) F^μ_ν u^ν (contravariant)
+        # Fix for issue #144: was erroneously using (F_contra @ vec[4:] @ g_cov)
+        vals[4:] += self.q.value * (F_contra @ vec[4:])
 
         return vals
 
