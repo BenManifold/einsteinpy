@@ -66,6 +66,9 @@ pip-wheel-metadata
 # VS Code
 .vscode
 
+# Cursor
+.cursor
+
 # Emacs
 TAGS
 
