@@ -9,4 +9,5 @@ class, that defines dual numbers, used for Forward Mode Auto Differentiation.
 
     dual
     scalar_factor
+    time_dilation
     exceptions

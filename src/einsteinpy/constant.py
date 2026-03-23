@@ -7,6 +7,7 @@ __all__ = [
     "eps0",
     "coulombs_const",
     "Cosmo_Const",
+    "Mass_Schwarzschild_Radius_1m",
     "Solar_Mass",
     "R_sun",
 ]
@@ -30,3 +31,7 @@ Cosmo_Const = Cosmo_Const_base.value * (u.s**-2)
 
 Solar_Mass = 1.9891e30 * u.kg
 R_sun = 695510 * u.km
+
+# Mass (kg) for which Schwarzschild radius r_s = 2GM/c² equals 1 m.
+# Convenient for tests: r in meters equals r/r_s, so e.g. r=3 means 3 r_s.
+Mass_Schwarzschild_Radius_1m = 6.73317655e26 * u.kg
