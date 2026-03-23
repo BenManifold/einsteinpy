@@ -8,7 +8,18 @@ import pytest
 from numpy.testing import assert_allclose
 
 from einsteinpy.coordinates import BoyerLindquistDifferential, SphericalDifferential
-from einsteinpy.coordinates.utils import lorentz_factor, v0
+from einsteinpy.coordinates.utils import (
+    bl_to_cartesian,
+    bl_to_cartesian_fast,
+    cartesian_to_bl,
+    cartesian_to_bl_fast,
+    cartesian_to_spherical,
+    cartesian_to_spherical_fast,
+    lorentz_factor,
+    spherical_to_cartesian,
+    spherical_to_cartesian_fast,
+    v0,
+)
 from einsteinpy.metric import Schwarzschild, Kerr, KerrNewman
 
 from einsteinpy import constant
@@ -172,3 +183,129 @@ def test_compare_vt_schwarzschild_kerr_kerrnewman(sph2, bl2):
     assert_allclose(v_vec_ms, v_vec_mk0, rtol=1e-8)
     assert_allclose(v_vec_mk, v_vec_mkn, rtol=1e-8)
     assert_allclose(v_vec_mkn0, v_vec_ms, rtol=1e-8)
+
+
+class TestCoordinateConversionUtils:
+    """Direct tests for coordinate conversion utility functions."""
+
+    def test_cartesian_to_spherical_fast_without_velocities(self):
+        """cartesian_to_spherical_fast without velocities uses novel path."""
+        t, r, th, phi = cartesian_to_spherical_fast(
+            0.0, 10.0, 0.0, 0.0, velocities_provided=False
+        )
+        assert_allclose(r, 10.0, rtol=1e-10)
+        assert_allclose(th, np.pi / 2, rtol=1e-10)
+        assert_allclose(phi, 0.0, rtol=1e-10)
+
+    def test_cartesian_to_spherical_fast_with_velocities(self):
+        """cartesian_to_spherical_fast with velocities uses full conversion."""
+        result = cartesian_to_spherical_fast(
+            0.0, 10.0, 0.0, 0.0,
+            v_x=1.0, v_y=0.0, v_z=0.0,
+            velocities_provided=True,
+        )
+        assert len(result) == 7
+        t, r, th, phi, v_r, v_th, v_p = result
+        assert_allclose(r, 10.0, rtol=1e-10)
+        assert_allclose(v_r, 1.0, rtol=1e-10)
+
+    def test_cartesian_to_spherical_roundtrip(self):
+        """cartesian_to_spherical and spherical_to_cartesian are inverse."""
+        x, y, z = 3.0, 4.0, 5.0
+        vx, vy, vz = 0.1, -0.2, 0.05
+        _, r, th, phi, v_r, v_th, v_p = cartesian_to_spherical(
+            0.0, x, y, z, vx, vy, vz
+        )
+        _, x2, y2, z2, vx2, vy2, vz2 = spherical_to_cartesian(
+            0.0, r, th, phi, v_r, v_th, v_p
+        )
+        assert_allclose([x, y, z], [x2, y2, z2], rtol=1e-10)
+        assert_allclose([vx, vy, vz], [vx2, vy2, vz2], rtol=1e-8)
+
+    def test_cartesian_to_bl_fast_without_velocities(self):
+        """cartesian_to_bl_fast without velocities uses novel path."""
+        alpha = 0.5
+        result = cartesian_to_bl_fast(
+            0.0, 10.0, 0.0, 0.0, alpha, velocities_provided=False
+        )
+        assert len(result) == 4  # (t, r, theta, phi)
+        t, r, th, phi = result
+        assert r > 0
+        assert 0 <= th <= np.pi
+
+    def test_cartesian_to_bl_fast_with_velocities(self):
+        """cartesian_to_bl_fast with velocities uses full conversion."""
+        alpha = 0.5
+        result = cartesian_to_bl_fast(
+            0.0, 10.0, 0.0, 0.0, alpha,
+            v_x=0.1, v_y=0.0, v_z=0.0,
+            velocities_provided=True,
+        )
+        assert len(result) == 7
+
+    def test_spherical_to_cartesian_fast_without_velocities(self):
+        """spherical_to_cartesian_fast without velocities uses novel path."""
+        r, th, phi = 10.0, np.pi / 2, np.pi / 4
+        result = spherical_to_cartesian_fast(
+            0.0, r, th, phi, velocities_provided=False
+        )
+        x = 10 / np.sqrt(2)
+        assert_allclose(result[1:4], [x, x, 0.0], rtol=1e-10, atol=1e-14)
+
+    def test_spherical_to_cartesian_fast_with_velocities(self):
+        """spherical_to_cartesian_fast with velocities uses full conversion."""
+        result = spherical_to_cartesian_fast(
+            0.0, 10.0, np.pi / 2, np.pi / 4,
+            v_r=1.0, v_th=0.0, v_p=0.1,
+            velocities_provided=True,
+        )
+        assert len(result) == 7
+
+    def test_bl_to_cartesian_fast_without_velocities(self):
+        """bl_to_cartesian_fast without velocities uses novel path."""
+        alpha = 0.5
+        result = bl_to_cartesian_fast(
+            0.0, 10.0, np.pi / 2, 0.0, alpha, velocities_provided=False
+        )
+        assert len(result) == 4  # (t, x, y, z)
+
+    def test_bl_to_cartesian_fast_with_velocities(self):
+        """bl_to_cartesian_fast with velocities uses full conversion."""
+        alpha = 0.5
+        result = bl_to_cartesian_fast(
+            0.0, 10.0, np.pi / 2, 0.0, alpha,
+            v_r=0.1, v_th=0.0, v_p=0.1,
+            velocities_provided=True,
+        )
+        assert len(result) == 7
+
+    def test_bl_cartesian_roundtrip(self):
+        """bl_to_cartesian and cartesian_to_bl are inverse."""
+        r, th, phi = 10.0, np.pi / 2, 0.5
+        vr, vth, vp = 0.1, 0.01, 0.2
+        alpha = 0.75
+        _, x, y, z, vx, vy, vz = bl_to_cartesian(
+            0.0, r, th, phi, alpha, vr, vth, vp
+        )
+        _, r2, th2, phi2, vr2, vth2, vp2 = cartesian_to_bl(
+            0.0, x, y, z, alpha, vx, vy, vz
+        )
+        assert_allclose([r, th, phi], [r2, th2, phi2], rtol=1e-8)
+        assert_allclose([vr, vth, vp], [vr2, vth2, vp2], rtol=1e-6)
+
+    def test_v0_direct_call(self):
+        """v0 returns positive timelike component from metric and 4-velocity spatial parts."""
+        # v0 expects spatial components of 4-velocity (u^1, u^2, u^3).
+        # Use Schwarzschild metric and small spatial 4-velocity.
+        M = 1e24 * u.kg
+        sph = SphericalDifferential(
+            0.0 * u.s, 10.0 * u.m, np.pi / 2 * u.rad, 0.0 * u.rad,
+            -0.1 * u.m / u.s, -0.01 * u.rad / u.s, 0.05 * u.rad / u.s,
+        )
+        ms = Schwarzschild(coords=sph, M=M)
+        x_vec = sph.position()
+        g = ms.metric_covariant(x_vec)
+        v_vec = sph.velocity(ms)
+        vt = v0(g, float(v_vec[1]), float(v_vec[2]), float(v_vec[3]))
+        assert vt > 0
+        assert np.isfinite(vt)

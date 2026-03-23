@@ -4,6 +4,7 @@ Gravitational time dilation and redshift.
 Formulas from standard GR:
 - Schwarzschild stationary: dτ/dt = √(1 - 2M/r) = √(1 - r_s/r)
 - Kerr stationary (Boyer-Lindquist): dτ/dt = √(g_tt/c²) for g_tt > 0
+- Moving observer: dτ/dt = 1/u^0 where u^0 = dt/dτ from 4-velocity (via v0).
 - Redshift: 1+z = √(-g_tt(emitter)) / √(-g_tt(observer))
   For (+, -, -, -) signature: √(g_tt(emitter)) / √(g_tt(observer))
 """
@@ -11,6 +12,7 @@ Formulas from standard GR:
 import numpy as np
 
 from einsteinpy import constant
+from einsteinpy.coordinates.utils import v0
 
 _c = constant.c.value
 
@@ -46,8 +48,8 @@ def proper_time_ratio(metric, position, velocity=None):
         (r, theta) or (r, theta, phi). r in meters, theta/phi in radians.
         theta defaults to π/2 (equatorial) if omitted.
     velocity : array_like, optional
-        (v_r, v_theta, v_phi) in coordinate basis. If None, assumes
-        stationary observer. Not yet implemented.
+        (v_r, v_theta, v_phi) in coordinate basis: v_r in m/s, v_theta and
+        v_phi in rad/s. If None, assumes stationary observer.
 
     Returns
     -------
@@ -59,15 +61,27 @@ def proper_time_ratio(metric, position, velocity=None):
     ValueError
         If position is inside horizon or ergosphere where a stationary
         observer cannot exist (g_tt ≤ 0).
-    """
-    if velocity is not None:
-        raise NotImplementedError("Non-stationary observers not yet supported")
 
+    Notes
+    -----
+    For moving observers, uses :func:`einsteinpy.coordinates.utils.v0` to compute
+    the 4-velocity time component (dt/dτ), then returns dτ/dt = 1/(dt/dτ).
+    """
     x_vec = _position_to_x_vec(position)
     if hasattr(metric, "metric_covariant"):
         g = metric.metric_covariant(x_vec)
     else:
         g = metric(x_vec)
+
+    if velocity is not None:
+        vel = np.atleast_1d(np.asarray(velocity, dtype=float))
+        if vel.size != 3:
+            raise ValueError("velocity must have 3 elements (v_r, v_theta, v_phi)")
+        v_r, v_th, v_phi = float(vel[0]), float(vel[1]), float(vel[2])
+        dt_dtau = v0(g, v_r, v_th, v_phi)
+        if dt_dtau <= 0 or not np.isfinite(dt_dtau):
+            return np.nan
+        return 1.0 / dt_dtau
 
     g_tt = g[0, 0]
     if g_tt <= 0:
@@ -76,11 +90,18 @@ def proper_time_ratio(metric, position, velocity=None):
     return np.sqrt(g_tt / (_c ** 2))
 
 
-def redshift_factor(metric, emitter_position, observer_position):
+def redshift_factor(
+    metric,
+    emitter_position,
+    observer_position,
+    emitter_velocity=None,
+    observer_velocity=None,
+):
     """
     1+z: factor by which photon wavelength shifts between emitter and observer.
 
     For two stationary observers: 1+z = √(g_tt(emitter)) / √(g_tt(observer)).
+    For moving observers, uses the ratio of proper_time_ratio at each location.
 
     Parameters
     ----------
@@ -90,14 +111,18 @@ def redshift_factor(metric, emitter_position, observer_position):
         (r, theta) or (r, theta, phi) of emitter.
     observer_position : array_like
         (r, theta) or (r, theta, phi) of observer.
+    emitter_velocity : array_like, optional
+        (v_r, v_theta, v_phi) of emitter. If None, emitter is stationary.
+    observer_velocity : array_like, optional
+        (v_r, v_theta, v_phi) of observer. If None, observer is stationary.
 
     Returns
     -------
     float
         (1+z) = λ_obs / λ_em. Redshift when > 1.
     """
-    dtau_emit = proper_time_ratio(metric, emitter_position)
-    dtau_obs = proper_time_ratio(metric, observer_position)
+    dtau_emit = proper_time_ratio(metric, emitter_position, velocity=emitter_velocity)
+    dtau_obs = proper_time_ratio(metric, observer_position, velocity=observer_velocity)
     if np.isnan(dtau_emit) or np.isnan(dtau_obs):
         return np.nan
     return dtau_obs / dtau_emit
