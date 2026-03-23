@@ -4,7 +4,13 @@ import numpy as np
 
 from einsteinpy.integrators import GeodesicIntegrator
 
-from .utils import _P, _kerr, _kerrnewman, _sch
+from einsteinpy.coordinates.utils import (
+    bl_to_kerrschild_cartesian,
+    bl_to_kerrschild_cartesian_with_momentum,
+    kerrschild_to_bl_cartesian,
+)
+
+from .utils import _P, _kerr, _kerr_ks, _kerrnewman, _sch
 
 
 class Geodesic:
@@ -23,6 +29,7 @@ class Geodesic:
         momentum,
         time_like=True,
         return_cartesian=True,
+        coords="BoyerLindquist",
         **kwargs,
     ):
         """
@@ -55,6 +62,14 @@ class Geodesic:
             This only affects the coordinates. Momenta are dimensionless
             quantities, and are returned in Spherical Polar Coordinates.
             Defaults to ``True``
+        coords : str, optional
+            Coordinate chart for Kerr metric. ``"BoyerLindquist"`` (default)
+            or ``"KerrSchild"``. KerrSchild is horizon-penetrating and stable
+            near the event horizon; use when integrating close to the horizon.
+            For KerrSchild, ``position`` and ``momentum`` are still given in BL
+            spherical (r, θ, φ) and (p_r, p_θ, p_φ); conversion is automatic.
+            Ignored for other metrics.
+            Defaults to ``"BoyerLindquist"``
         kwargs : dict
             Keyword parameters for the Geodesic Integrator
             See 'Other Parameters' below.
@@ -98,7 +113,11 @@ class Geodesic:
             "KerrNewman": _kerrnewman,
         }
 
-        if metric not in _METRICS:
+        # Select Kerr-Schild for Kerr when requested (horizon-penetrating)
+        if metric == "Kerr" and coords == "KerrSchild":
+            self.metric_name = "Kerr"
+            self.metric = _kerr_ks
+        elif metric not in _METRICS:
             if not callable(metric):
                 raise NotImplementedError(
                     f"'{metric}' is unsupported. Currently, these metrics are supported:\
@@ -114,10 +133,28 @@ class Geodesic:
         self.metric_params = metric_params
         if metric == "Schwarzschild":
             self.metric_params = (0.0,)
-        self.position = np.array([0.0, *position])
-        self.momentum = _P(
-            self.metric, metric_params, self.position, momentum, time_like
-        )
+        self._use_kerrschild = metric == "Kerr" and coords == "KerrSchild"
+
+        if self._use_kerrschild:
+            # Convert BL (r, θ, φ) and (p_r, p_θ, p_φ) to Kerr-Schild Cartesian
+            a = metric_params[0]
+            t, x, y, z = bl_to_kerrschild_cartesian(
+                0.0, position[0], position[1], position[2], a
+            )
+            _, _, _, _, _, p_x, p_y, p_z = bl_to_kerrschild_cartesian_with_momentum(
+                0.0, position[0], position[1], position[2], a,
+                0.0, momentum[0], momentum[1], momentum[2],
+            )
+            self.position = np.array([0.0, float(x), float(y), float(z)])
+            self.momentum = _P(
+                self.metric, metric_params,
+                self.position, [p_x, p_y, p_z], time_like,
+            )
+        else:
+            self.position = np.array([0.0, *position])
+            self.momentum = _P(
+                self.metric, metric_params, self.position, momentum, time_like
+            )
         self.time_like = time_like
 
         self.kind = "Time-like" if time_like else "Null-like"
@@ -238,6 +275,20 @@ class Geodesic:
         # q2 = vecs[:, 2]
         # p2 = vecs[:, 3]
 
+        if self._use_kerrschild:
+            # Integration in (t, x, y, z). Convert to BL if user asked for spherical
+            if self.coords == "Spherical Polar":
+                a = self.metric_params[0]
+                t_vals = q1[:, 0]
+                x_vals, y_vals, z_vals = q1[:, 1], q1[:, 2], q1[:, 3]
+                _, r_vals, th_vals, ph_vals = kerrschild_to_bl_cartesian(
+                    t_vals, x_vals, y_vals, z_vals, a
+                )
+                # Momentum stays in Cartesian; converting p to BL would need inverse Jacobian
+                # For consistency with BL output convention, we pack (t,r,th,ph,pt,px,py,pz)
+                q_bl = np.stack([t_vals, r_vals, th_vals, ph_vals], axis=1)
+                return steps, np.hstack((q_bl, p1))
+            return steps, np.hstack((q1, p1))
         if self.coords == "Cartesian":
             # Converting to Cartesian from Spherical Polar Coordinates
             # Note that momenta cannot be converted this way,
@@ -262,7 +313,14 @@ class Nulllike(Geodesic):
     """
 
     def __init__(
-        self, metric, metric_params, position, momentum, return_cartesian=True, **kwargs
+        self,
+        metric,
+        metric_params,
+        position,
+        momentum,
+        return_cartesian=True,
+        coords="BoyerLindquist",
+        **kwargs,
     ):
         """
         Constructor
@@ -332,6 +390,7 @@ class Nulllike(Geodesic):
             momentum=momentum,
             time_like=False,
             return_cartesian=return_cartesian,
+            coords=coords,
             **kwargs,
         )
 
@@ -343,7 +402,14 @@ class Timelike(Geodesic):
     """
 
     def __init__(
-        self, metric, metric_params, position, momentum, return_cartesian=True, **kwargs
+        self,
+        metric,
+        metric_params,
+        position,
+        momentum,
+        return_cartesian=True,
+        coords="BoyerLindquist",
+        **kwargs,
     ):
         """
         Constructor
@@ -370,6 +436,9 @@ class Timelike(Geodesic):
             This only affects the coordinates. The momenta dimensionless
             quantities, and are returned in Spherical Polar Coordinates.
             Defaults to ``True``
+        coords : str, optional
+            Coordinate chart for Kerr: ``"BoyerLindquist"`` or ``"KerrSchild"``.
+            Defaults to ``"BoyerLindquist"``
         kwargs : dict
             Keyword parameters for the Geodesic Integrator
             See 'Other Parameters' below.
@@ -413,5 +482,6 @@ class Timelike(Geodesic):
             momentum=momentum,
             time_like=True,
             return_cartesian=return_cartesian,
+            coords=coords,
             **kwargs,
         )

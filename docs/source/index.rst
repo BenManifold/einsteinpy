@@ -88,6 +88,7 @@ Contents
     gr_primer
     installation
     user_guide
+    near_horizon_coordinates
     jupyter
     api/index
     dev_guide

@@ -51,6 +51,25 @@ def test_str_repr(dummy_timegeod):
     assert str(geod) == repr(geod)
 
 
+def test_timelike_kerrschild():
+    """Kerr-Schild coordinates allow geodesic integration near horizon."""
+    geod = Timelike(
+        metric="Kerr",
+        metric_params=(0.9,),
+        position=[4.0, np.pi / 2, 0.0],
+        momentum=[0.0, 0.0, 2.4],
+        coords="KerrSchild",
+        steps=100,
+        delta=0.3,
+        return_cartesian=True,
+        suppress_warnings=True,
+    )
+    steps_arr, results = geod.trajectory
+    assert len(results) == 100
+    assert results.shape[1] == 8  # t, x, y, z, pt, px, py, pz
+    assert np.all(np.isfinite(results))
+
+
 def test_NotImplementedError():
     try:
         geod = Nulllike(

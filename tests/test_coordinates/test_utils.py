@@ -11,10 +11,12 @@ from einsteinpy.coordinates import BoyerLindquistDifferential, SphericalDifferen
 from einsteinpy.coordinates.utils import (
     bl_to_cartesian,
     bl_to_cartesian_fast,
+    bl_to_kerrschild_cartesian,
     cartesian_to_bl,
     cartesian_to_bl_fast,
     cartesian_to_spherical,
     cartesian_to_spherical_fast,
+    kerrschild_to_bl_cartesian,
     lorentz_factor,
     spherical_to_cartesian,
     spherical_to_cartesian_fast,
@@ -292,6 +294,14 @@ class TestCoordinateConversionUtils:
         )
         assert_allclose([r, th, phi], [r2, th2, phi2], rtol=1e-8)
         assert_allclose([vr, vth, vp], [vr2, vth2, vp2], rtol=1e-6)
+
+    def test_bl_kerrschild_roundtrip(self):
+        """bl_to_kerrschild_cartesian and kerrschild_to_bl_cartesian are inverse."""
+        t, r, th, phi = 0.0, 6.0, np.pi / 2, 0.3
+        alpha = 0.9
+        _, x, y, z = bl_to_kerrschild_cartesian(t, r, th, phi, alpha)
+        _, r2, th2, phi2 = kerrschild_to_bl_cartesian(t, x, y, z, alpha)
+        assert_allclose([r, th, phi], [r2, th2, phi2], rtol=1e-8)
 
     def test_v0_direct_call(self):
         """v0 returns positive timelike component from metric and 4-velocity spatial parts."""

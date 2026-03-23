@@ -144,6 +144,109 @@ def spherical_to_cartesian_novel(t, r, th, p):
     return t, x, y, z
 
 
+def bl_to_kerrschild_cartesian(t, r, th, p, alpha):
+    """
+    Convert Boyer-Lindquist (t, r, θ, φ) to Kerr-Schild Cartesian (t, x, y, z).
+
+    Spatial coordinates use the oblate spheroidal mapping. Time is unchanged
+    (same asymptotic time). Uses geometric units (M-units).
+
+    Parameters
+    ----------
+    t : float or array
+        Time coordinate
+    r, th, p : float or array
+        BL radial, polar, azimuthal coordinates
+    alpha : float
+        Spin parameter a (in geometric units)
+
+    Returns
+    -------
+    t, x, y, z : same type as inputs
+        Kerr-Schild Cartesian coordinates
+    """
+    xa = np.sqrt(r**2 + alpha**2)
+    sin_norm = xa * np.sin(th)
+    x = sin_norm * np.cos(p)
+    y = sin_norm * np.sin(p)
+    z = r * np.cos(th)
+    return t, x, y, z
+
+
+def bl_to_kerrschild_cartesian_with_momentum(
+    t, r, th, p, alpha, p_t, p_r, p_th, p_phi
+):
+    """
+    Convert BL position and 4-momentum to Kerr-Schild Cartesian.
+
+    The spatial momentum (p^x, p^y, p^z) is obtained via the Jacobian of
+    (x, y, z) w.r.t. (r, θ, φ). p^t is unchanged.
+
+    Parameters
+    ----------
+    t, r, th, p : float
+        BL position
+    alpha : float
+        Spin parameter
+    p_t, p_r, p_th, p_phi : float
+        Contravariant 4-momentum in BL
+
+    Returns
+    -------
+    t, x, y, z : float
+        Position in Kerr-Schild Cartesian
+    p_t, p_x, p_y, p_z : float
+        4-momentum in Kerr-Schild Cartesian
+    """
+    xa = np.sqrt(r**2 + alpha**2)
+    sin_th = np.sin(th)
+    cos_th = np.cos(th)
+    sin_p = np.sin(p)
+    cos_p = np.cos(p)
+    x = xa * sin_th * cos_p
+    y = xa * sin_th * sin_p
+    z = r * cos_th
+    # Jacobian rows: (dx, dy, dz) = J @ (dr, dth, dphi)
+    Jxr = r / xa * sin_th * cos_p
+    Jxth = xa * cos_th * cos_p
+    Jxphi = -xa * sin_th * sin_p
+    Jyr = r / xa * sin_th * sin_p
+    Jyth = xa * cos_th * sin_p
+    Jyphi = xa * sin_th * cos_p
+    Jzr = cos_th
+    Jzth = -r * sin_th
+    Jzphi = 0.0
+    p_x = Jxr * p_r + Jxth * p_th + Jxphi * p_phi
+    p_y = Jyr * p_r + Jyth * p_th + Jyphi * p_phi
+    p_z = Jzr * p_r + Jzth * p_th + Jzphi * p_phi
+    return t, x, y, z, p_t, p_x, p_y, p_z
+
+
+def kerrschild_to_bl_cartesian(t, x, y, z, alpha):
+    """
+    Convert Kerr-Schild Cartesian (t, x, y, z) to Boyer-Lindquist (t, r, θ, φ).
+
+    Inverse of bl_to_kerrschild_cartesian. Uses cartesian_to_bl logic.
+
+    Parameters
+    ----------
+    t, x, y, z : float or array
+        Kerr-Schild Cartesian coordinates
+    alpha : float
+        Spin parameter
+
+    Returns
+    -------
+    t, r, th, p : same type as inputs
+        Boyer-Lindquist coordinates
+    """
+    w = (x**2 + y**2 + z**2) - (alpha**2)
+    r = np.sqrt(0.5 * (w + np.sqrt((w**2) + (4 * (alpha**2) * (z**2)))))
+    th = np.arccos(z / np.maximum(r, 1e-30))
+    p = np.arctan2(y, x)
+    return t, r, th, p
+
+
 def bl_to_cartesian_fast(
     t, r, th, p, alpha, v_r=None, v_th=None, v_p=None, velocities_provided=False
 ):

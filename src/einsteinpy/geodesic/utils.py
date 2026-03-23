@@ -41,11 +41,16 @@ def _P(g, g_prms, q, p, time_like=True):
     P = np.array([0.0, *p])
 
     A = guu[0, 0]
-    B = 2 * guu[0, 3] * P[3]
+    B = 2 * (
+        guu[0, 1] * P[1] + guu[0, 2] * P[2] + guu[0, 3] * P[3]
+    )
     C = (
         guu[1, 1] * P[1] * P[1]
         + guu[2, 2] * P[2] * P[2]
         + guu[3, 3] * P[3] * P[3]
+        + 2 * guu[1, 2] * P[1] * P[2]
+        + 2 * guu[1, 3] * P[1] * P[3]
+        + 2 * guu[2, 3] * P[2] * P[3]
         + int(time_like)
     )
 
@@ -176,6 +181,84 @@ def _kerr(x_vec, *params):
     g[3, 3] = (1 / (dl * np.sin(th) ** 2)) * (1 - 2 * r / sg)
     g[0, 3] = g[3, 0] = -(2 * r * a) / (sg * dl)
 
+    return g
+
+
+def _r_from_kerrschild_cartesian(x, y, z, a):
+    """
+    Compute oblate spheroidal r from Kerr-Schild Cartesian (x, y, z).
+
+    r is the positive root of r^4 - r^2(x^2+y^2+z^2-a^2) - a^2 z^2 = 0.
+    Uses M-units (c = G = M = 1). Compatible with DualNumber for AD.
+
+    Parameters
+    ----------
+    x, y, z : float or array_like
+        Cartesian coordinates (Kerr-Schild convention)
+    a : float
+        Spin parameter
+
+    Returns
+    -------
+    r : same type as inputs
+        Oblate spheroidal radial coordinate
+    """
+    w = (x**2) + (y**2) + (z**2) - (a**2)
+    r_sq = 0.5 * (w + (w**2 + 4 * (a**2) * (z**2)) ** 0.5)
+    return r_sq**0.5
+
+
+def _kerr_ks(x_vec, *params):
+    """
+    Contravariant Kerr Metric in Kerr-Schild Cartesian coordinates.
+    Uses natural units, with :math:`c = G = M = k_e = 1`
+
+    Form: g^μν = η^μν - f k^μ k^ν with k null. No 1/Δ terms; regular at horizon.
+
+    Parameters
+    ----------
+    x_vec : array_like
+        4-Position (t, x, y, z) in Kerr-Schild Cartesian coordinates
+
+    Other Parameters
+    ----------------
+    params : array_like
+        Tuple of parameters. Must contain spin parameter ``a``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Contravariant Kerr Metric Tensor (4×4)
+    """
+    a = params[0]
+    t, x, y, z = x_vec[0], x_vec[1], x_vec[2], x_vec[3]
+    r = _r_from_kerrschild_cartesian(x, y, z, a)
+    a2 = a**2
+    r2 = r**2
+    r2pa2 = r2 + a2
+    # Add small constant to avoid 0/0 at ring singularity (DualNumber-compatible)
+    _eps = 1e-30
+    denom = r**4 + a2 * (z**2) + _eps
+    f = 2 * (r**3) / denom
+    kx = (r * x + a * y) / (r2pa2 + _eps)
+    ky = (r * y - a * x) / (r2pa2 + _eps)
+    kz = z / (r + _eps)
+    # k^μ = η^μν k_ν: k^0 = -k_0 = -1, k^i = k_i
+    k0_u = -1.0
+    k1_u = kx
+    k2_u = ky
+    k3_u = kz
+    g = np.zeros(shape=(4, 4), dtype=DualNumber)
+    g[0, 0] = -1.0 - f * k0_u * k0_u
+    g[1, 1] = 1.0 - f * k1_u * k1_u
+    g[2, 2] = 1.0 - f * k2_u * k2_u
+    g[3, 3] = 1.0 - f * k3_u * k3_u
+    g[0, 1] = g[1, 0] = -f * k0_u * k1_u
+    g[0, 2] = g[2, 0] = -f * k0_u * k2_u
+    g[0, 3] = g[3, 0] = -f * k0_u * k3_u
+    g[1, 2] = g[2, 1] = -f * k1_u * k2_u
+    g[1, 3] = g[3, 1] = -f * k1_u * k3_u
+    g[2, 3] = g[3, 2] = -f * k2_u * k3_u
     return g
 
 
